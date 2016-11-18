@@ -33,6 +33,10 @@ type CoreState = {
   touchIdentifier: ?number
 };
 
+type DomNode = {
+  ownerDocument: any
+};
+
 //
 // Define <DraggableCore>.
 //
@@ -172,6 +176,16 @@ export default class DraggableCore extends React.Component {
     onMouseDown: function(){}
   };
 
+  /**
+   * `domNode`, reference to underlying dom node
+   */
+  domNode: DomNode = {
+    ownerDocument: {
+      body: undefined,
+      defaultView: undefined
+    }
+  };
+
   state: CoreState = {
     dragging: false,
     // Used while dragging to determine deltas.
@@ -182,7 +196,7 @@ export default class DraggableCore extends React.Component {
   componentWillUnmount() {
     // Remove any leftover event handlers. Remove both touch and mouse handlers in case
     // some browser quirk caused a touch event to fire during a mouse move, or vice versa.
-    const {ownerDocument} = ReactDOM.findDOMNode(this);
+    const {ownerDocument} = this.domNode
     removeEvent(ownerDocument, eventsFor.mouse.move, this.handleDrag);
     removeEvent(ownerDocument, eventsFor.touch.move, this.handleDrag);
     removeEvent(ownerDocument, eventsFor.mouse.stop, this.handleDragStop);
@@ -198,14 +212,13 @@ export default class DraggableCore extends React.Component {
     if (!this.props.allowAnyClick && typeof e.button === 'number' && e.button !== 0) return false;
 
     // Get nodes. Be sure to grab relative document (could be iframed)
-    const domNode = ReactDOM.findDOMNode(this);
-    const {ownerDocument} = domNode;
+    const {ownerDocument} = this.domNode;
 
     // Short circuit if handle or cancel prop was provided and selector doesn't match.
     if (this.props.disabled ||
       (!(e.target instanceof ownerDocument.defaultView.Node)) ||
-      (this.props.handle && !matchesSelectorAndParentsTo(e.target, this.props.handle, domNode)) ||
-      (this.props.cancel && matchesSelectorAndParentsTo(e.target, this.props.cancel, domNode))) {
+      (this.props.handle && !matchesSelectorAndParentsTo(e.target, this.props.handle, this.domNode)) ||
+      (this.props.cancel && matchesSelectorAndParentsTo(e.target, this.props.cancel, this.domNode))) {
       return;
     }
 
@@ -302,7 +315,7 @@ export default class DraggableCore extends React.Component {
     if (position == null) return;
     const {x, y} = position;
     const coreEvent = createCoreData(this, x, y);
-    const {ownerDocument} = ReactDOM.findDOMNode(this);
+    const {ownerDocument} = this.domNode
 
     // Remove user-select hack
     if (this.props.enableUserSelectHack) removeUserSelectStyles(ownerDocument.body);
@@ -356,14 +369,17 @@ export default class DraggableCore extends React.Component {
     // Reuse the child provided
     // This makes it flexible to use whatever element is wanted (div, ul, etc)
     return React.cloneElement(React.Children.only(this.props.children), {
+      ref: (node) => {
+        this.domNode = ReactDOM.findDOMNode(node)
+        // console.log('domNode', this.domNode)
+      },
       style: styleHacks(this.props.children.props.style),
-
       // Note: mouseMove handler is attached to document so it will still function
       // when the user drags quickly and leaves the bounds of the element.
-      onMouseDown: this.onMouseDown,
-      onTouchStart: this.onTouchStart,
-      onMouseUp: this.onMouseUp,
-      onTouchEnd: this.onTouchEnd
+      onMouseDown: this.onMouseDown.bind(this),
+      onTouchStart: this.onTouchStart.bind(this),
+      onMouseUp: this.onMouseUp.bind(this),
+      onTouchEnd: this.onTouchEnd.bind(this)
     });
   }
 }
